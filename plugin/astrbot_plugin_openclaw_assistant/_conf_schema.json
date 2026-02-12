@@ -118,7 +118,7 @@
     "description": "OpenClaw主网关URL",
     "type": "string",
     "hint": "例如 http://127.0.0.1:18789",
-    "default": ""
+    "default": "http://127.0.0.1:18789"
   },
   "gateway_backup_url": {
     "description": "OpenClaw备网关URL",

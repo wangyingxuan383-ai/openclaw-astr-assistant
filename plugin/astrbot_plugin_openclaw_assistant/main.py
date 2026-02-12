@@ -70,6 +70,8 @@ TOOL_ACTION_CATEGORY = {
     "host_file_op": "host_file_op",
 }
 
+DEFAULT_GATEWAY_PRIMARY_URL = "http://127.0.0.1:18789"
+
 
 def _now_ts() -> float:
     return time.time()
@@ -109,7 +111,7 @@ def _truncate(s: str, limit: int = 2000) -> str:
     PLUGIN_NAME,
     "openclaw-astr",
     "OpenClaw × Astr QQ 私人助手（网关直连）",
-    "0.1.2",
+    "0.1.3",
     "https://github.com/openclaw/openclaw",
 )
 class OpenClawAstrAssistant(Star):
@@ -275,7 +277,11 @@ class OpenClawAstrAssistant(Star):
     async def _run_openclaw_turn(
         self, event: AstrMessageEvent, task_text: str, effective_level: int
     ) -> str:
-        primary_url = str(self.config.get("gateway_primary_url", "")).strip().rstrip("/")
+        primary_url = (
+            str(self.config.get("gateway_primary_url", DEFAULT_GATEWAY_PRIMARY_URL))
+            .strip()
+            .rstrip("/")
+        )
         if not primary_url:
             raise RuntimeError("未配置 gateway_primary_url，当前处于仅诊断模式。")
 
@@ -1107,7 +1113,11 @@ class OpenClawAstrAssistant(Star):
         self._http_session = None
 
     def _gateway_url_candidates(self) -> List[str]:
-        primary = str(self.config.get("gateway_primary_url", "")).strip().rstrip("/")
+        primary = (
+            str(self.config.get("gateway_primary_url", DEFAULT_GATEWAY_PRIMARY_URL))
+            .strip()
+            .rstrip("/")
+        )
         backup = str(self.config.get("gateway_backup_url", "")).strip().rstrip("/")
         urls = []
         if primary:
@@ -1145,7 +1155,9 @@ class OpenClawAstrAssistant(Star):
 
         return {
             "time": _iso_now(),
-            "gateway_primary_url": str(self.config.get("gateway_primary_url", "")).strip(),
+            "gateway_primary_url": str(
+                self.config.get("gateway_primary_url", DEFAULT_GATEWAY_PRIMARY_URL)
+            ).strip(),
             "gateway_backup_url": str(self.config.get("gateway_backup_url", "")).strip(),
             "gateway_agent_id": str(self.config.get("gateway_agent_id", "main")).strip() or "main",
             "executor_priority": str(
@@ -1724,7 +1736,9 @@ class OpenClawAstrAssistant(Star):
             warnings.append("当前进程以 root 运行，L3 文件操作已被安全门禁用。")
         if (
             not str(self.config.get("gateway_backup_url", "")).strip()
-            and str(self.config.get("gateway_primary_url", "")).strip()
+            and str(
+                self.config.get("gateway_primary_url", DEFAULT_GATEWAY_PRIMARY_URL)
+            ).strip()
         ):
             warnings.append("未配置备网关，主网关故障时将直接失败。")
         if self._configured_parallel_turns != 1:
