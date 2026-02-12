@@ -1,7 +1,0 @@
-name: astrbot_plugin_openclaw_assistant
-display_name: OpenClaw Astr 助手
-desc: "[仅QQ] 私人助手插件，Astr 直连 OpenClaw Gateway，支持鉴权、诊断、会话重置、模型导出与受限工具执行"
-help: 使用 /助手 帮助 查看命令
-version: v0.1.3
-author: openclaw-astr
-repo: https://github.com/openclaw/openclaw
