@@ -11,3 +11,7 @@
 - Enhanced repository `README.md` with full installation/deployment steps.
 - Added screenshot documentation guide at `docs/screenshots/README.md`.
 - Added explicit security and risk statement for high-permission operations.
+
+## v0.1.2 (2026-02-12)
+- Converted root `README.md` to Chinese.
+- Clarified repository boundary: single repo includes both plugin source and backend sidecar deployment templates.
