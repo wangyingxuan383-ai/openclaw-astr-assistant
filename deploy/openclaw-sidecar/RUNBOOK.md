@@ -15,7 +15,7 @@
 ```bash
 cd /root/openclaw-assistant-backend
 cp -n .env.example .env
-# 编辑 .env，写入 OPENCLAW_GATEWAY_TOKEN
+# 编辑 .env，写入 OPENCLAW_GATEWAY_TOKEN（并确认 OPENCLAW_VERSION）
 
 docker compose -f openclaw_sidecar.compose.yml up -d
 docker compose -f openclaw_sidecar.compose.yml ps
@@ -38,7 +38,9 @@ docker ps --filter name=openclaw-gateway
 ss -lntp | rg 18789
 
 # 网关连通性（无 token 时应 401/403）
-curl -i http://127.0.0.1:18789/v1/responses
+curl -i -X POST http://127.0.0.1:18789/v1/responses \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"openclaw:main","stream":false,"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"ping"}]}]}'
 ```
 
 ## 5. 插件侧最小配置
@@ -48,7 +50,7 @@ curl -i http://127.0.0.1:18789/v1/responses
 
 ## 6. 常见故障与处理
 - `auth_failed`
-  - 原因：插件 token 与 sidecar token 不一致
+  - 原因：插件 token 与 sidecar token 不一致（常见为 401/403）
   - 处理：统一 `gateway_bearer_token` 与 `.env` 中 `OPENCLAW_GATEWAY_TOKEN`
 - `responses_endpoint_not_enabled_or_not_found`
   - 原因：`openclaw_sidecar.config.json5` 未启用 responses
@@ -57,7 +59,18 @@ curl -i http://127.0.0.1:18789/v1/responses
   - 原因：容器未启动、端口未监听、网络问题
   - 处理：检查 `docker compose ps`、`docker logs openclaw-gateway`、`ss -lntp`
 
-## 7. 稳定性约束（本机低配必须遵守）
+## 7. 版本升级与回滚
+- 本模板默认固定 `OPENCLAW_VERSION=2026.2.9`，避免 `latest` 漂移。
+- 升级：修改 `.env` 中 `OPENCLAW_VERSION` 后执行：
+
+```bash
+cd /root/openclaw-assistant-backend
+docker compose -f openclaw_sidecar.compose.yml up -d --force-recreate
+```
+
+- 回滚：将 `OPENCLAW_VERSION` 改回上一版本并重建容器。
+
+## 8. 稳定性约束（本机低配必须遵守）
 - 插件并发固定为 `1`
 - 可用内存 `<512MB` 拒绝重任务
 - 可用内存 `<350MB` 强制只读（L1）

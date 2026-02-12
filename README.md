@@ -38,6 +38,7 @@ cp deploy/openclaw-sidecar/.env.example /root/openclaw-assistant-backend/.env
 
 ```env
 OPENCLAW_GATEWAY_TOKEN=replace_with_strong_random_token
+OPENCLAW_VERSION=2026.2.9
 ```
 
 4. 启动 sidecar：
@@ -56,6 +57,15 @@ docker compose -f openclaw_sidecar.compose.yml ps
 6. 在 QQ 内验证：
 - `/助手 诊断`
 - `/助手 帮助`
+
+## 版本固定与升级
+- sidecar 默认使用固定版本：`OPENCLAW_VERSION=2026.2.9`（避免 `latest` 漂移）。
+- 升级流程：
+1. 修改 `/root/openclaw-assistant-backend/.env` 中 `OPENCLAW_VERSION`。
+2. 执行 `docker compose -f openclaw_sidecar.compose.yml up -d --force-recreate`。
+- 回滚流程：
+1. 将 `OPENCLAW_VERSION` 改回上一版本。
+2. 重新执行 `up -d --force-recreate`。
 
 ## 风险声明（后端）
 - sidecar 对外仅映射本机回环端口：`127.0.0.1:18789`，不要直接暴露公网。

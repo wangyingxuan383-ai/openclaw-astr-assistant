@@ -21,3 +21,12 @@
 - This repository is now backend-only (`deploy/openclaw-sidecar/*`).
 - Removed plugin source from this repository.
 - Standalone plugin repository: `https://github.com/wangyingxuan383-ai/astrbot_plugin_openclaw_assistant`
+
+## v0.2.1 (2026-02-12)
+- Deployment reproducibility hardening:
+  - Pinned OpenClaw installation to `openclaw@${OPENCLAW_VERSION}` (default `2026.2.9`).
+  - Added `OPENCLAW_VERSION` to `.env.example`.
+- Runbook hardening:
+  - Health check switched to `POST /v1/responses`.
+  - Auth failure guidance unified as `401/403 -> auth_failed`.
+  - Added explicit upgrade and rollback workflow for version pinning.

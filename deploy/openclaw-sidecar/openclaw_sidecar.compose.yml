@@ -6,7 +6,7 @@ services:
     working_dir: /work
     command: >
       bash -lc "
-      npm install -g openclaw@latest &&
+      npm install -g openclaw@${OPENCLAW_VERSION:-2026.2.9} &&
       openclaw gateway
       --allow-unconfigured
       "
