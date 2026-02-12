@@ -1,0 +1,28 @@
+services:
+  openclaw-gateway:
+    image: node:22-bookworm
+    container_name: openclaw-gateway
+    restart: unless-stopped
+    working_dir: /work
+    command: >
+      bash -lc "
+      npm install -g openclaw@latest &&
+      openclaw gateway
+      --allow-unconfigured
+      "
+    env_file:
+      - ${OPENCLAW_BACKEND_ROOT:-/root/openclaw-assistant-backend}/.env
+    environment:
+      - TZ=Asia/Shanghai
+      - OPENCLAW_CONFIG_PATH=/work/openclaw_sidecar.config.json5
+    volumes:
+      - ${OPENCLAW_BACKEND_ROOT:-/root/openclaw-assistant-backend}/data/openclaw_home:/root/.openclaw
+      - ${OPENCLAW_BACKEND_ROOT:-/root/openclaw-assistant-backend}/data/openclaw_workspace:/work
+      - ${OPENCLAW_BACKEND_ROOT:-/root/openclaw-assistant-backend}/openclaw_sidecar.config.json5:/work/openclaw_sidecar.config.json5:ro
+    ports:
+      - "127.0.0.1:18789:18789"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const s=require('net').createConnection(18789,'127.0.0.1');s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),3000);\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3

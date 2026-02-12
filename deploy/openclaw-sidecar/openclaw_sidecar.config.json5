@@ -1,0 +1,18 @@
+{
+  gateway: {
+    bind: "loopback",
+    port: 18789,
+    auth: {
+      mode: "token",
+      // token 通过环境变量 OPENCLAW_GATEWAY_TOKEN 提供
+    },
+    http: {
+      endpoints: {
+        // 显式启用 OpenResponses 端点，避免依赖默认值
+        responses: { enabled: true },
+        // V1 不需要 ChatCompletions
+        chatCompletions: { enabled: false },
+      },
+    },
+  },
+}
