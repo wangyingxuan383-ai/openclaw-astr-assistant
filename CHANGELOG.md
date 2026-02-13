@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.0 (2026-02-12)
+- Added `backend-service/` (FastAPI + Jinja2 + sqlite):
+  - Web pages: `GET /web/status`, `GET /web/models`
+  - API: `status`, `executors`, `models`, `models/import-astr`, executor job lifecycle APIs
+  - Async executor queue (concurrency fixed to `1`) with Codex real dispatch
+  - Gemini executor reserved but disabled in V1.1
+- Added backend audit trail fields and trace-id propagation.
+- Added `backend-service/.env.example` and `requirements.txt`.
+- Updated deployment docs:
+  - Root `README.md` now covers sidecar + backend-service dual deployment
+  - `deploy/openclaw-sidecar/RUNBOOK.md` expanded for backend-service operations
+  - `.env.example` now includes `BACKEND_API_TOKEN`
+
 ## v0.1.0 (2026-02-12)
 - Initial public release skeleton.
 - Added Astr plugin source (`plugin/astrbot_plugin_openclaw_assistant`).

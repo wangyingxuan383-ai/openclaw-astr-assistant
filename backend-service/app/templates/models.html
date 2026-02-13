@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenClaw Astr Backend - 模型同步</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --line: #dce3ed;
+      --text: #1f2937;
+      --muted: #5b6472;
+      --accent: #0b4da2;
+    }
+    body {
+      margin: 0;
+      font-family: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1080px;
+      margin: 24px auto;
+      padding: 0 16px 24px;
+    }
+    .head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .head h1 { margin: 0; font-size: 22px; }
+    .links a {
+      text-decoration: none;
+      color: var(--accent);
+      margin-left: 12px;
+      font-size: 14px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    td, th {
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      padding: 8px;
+      vertical-align: top;
+    }
+    th { color: var(--muted); }
+    code {
+      background: #eef3fb;
+      border: 1px solid #d7e2f4;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1>模型同步页</h1>
+      <div class="links">
+        <a href="/web/status">状态</a>
+        <a href="/web/models">模型同步</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <table>
+        <tr><th>最后同步</th><td>{{ last_sync or "暂无" }}</td></tr>
+        <tr><th>说明</th><td>仅保存 provider 元数据，不保存 API Key/Token。</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>provider_id</th>
+            <th>model</th>
+            <th>provider_type</th>
+            <th>base_url</th>
+            <th>source</th>
+            <th>imported_at</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in models %}
+            <tr>
+              <td><code>{{ row.provider_id }}</code></td>
+              <td>{{ row.model }}</td>
+              <td>{{ row.provider_type }}</td>
+              <td>{{ row.base_url }}</td>
+              <td>{{ row.source }}</td>
+              <td>{{ row.imported_at }}</td>
+            </tr>
+          {% endfor %}
+          {% if not models %}
+            <tr><td colspan="6">暂无数据，请在 QQ 中执行 <code>/助手 模型导出JSON</code> 并开启自动推送。</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

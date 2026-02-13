@@ -4,12 +4,16 @@ services:
     container_name: openclaw-gateway
     restart: unless-stopped
     working_dir: /work
-    command: >
-      bash -lc "
-      npm install -g openclaw@${OPENCLAW_VERSION:-2026.2.9} &&
-      openclaw gateway
-      --allow-unconfigured
-      "
+    command:
+      - bash
+      - -lc
+      - |
+        npm install -g "openclaw@${OPENCLAW_VERSION:-2026.2.9}" && \
+        exec openclaw gateway run --allow-unconfigured \
+          --port 18789 \
+          --auth token \
+          --token "$OPENCLAW_GATEWAY_TOKEN" \
+          --verbose
     env_file:
       - ${OPENCLAW_BACKEND_ROOT:-/root/openclaw-assistant-backend}/.env
     environment:

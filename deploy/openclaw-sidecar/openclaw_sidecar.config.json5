@@ -1,6 +1,8 @@
 {
   gateway: {
-    bind: "loopback",
+    mode: "local",
+    // 容器内必须监听非 loopback，才能通过 docker 端口映射被宿主访问
+    bind: "lan",
     port: 18789,
     auth: {
       mode: "token",

@@ -10,6 +10,7 @@ logs/
 # python
 __pycache__/
 *.pyc
+backend-service/.venv/
 
 # audit / cache
 audit.jsonl

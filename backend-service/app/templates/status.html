@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OpenClaw Astr Backend - 状态</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --line: #dce3ed;
+      --text: #1f2937;
+      --muted: #5b6472;
+      --ok: #0f766e;
+      --bad: #b91c1c;
+      --accent: #0b4da2;
+    }
+    body {
+      margin: 0;
+      font-family: "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 24px auto;
+      padding: 0 16px 24px;
+    }
+    .head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .head h1 { margin: 0; font-size: 22px; }
+    .links a {
+      text-decoration: none;
+      color: var(--accent);
+      margin-left: 12px;
+      font-size: 14px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    td, th {
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      padding: 8px;
+      vertical-align: top;
+    }
+    th { width: 220px; color: var(--muted); }
+    .ok { color: var(--ok); font-weight: 700; }
+    .bad { color: var(--bad); font-weight: 700; }
+    code {
+      background: #eef3fb;
+      border: 1px solid #d7e2f4;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <h1>后端状态页</h1>
+      <div class="links">
+        <a href="/web/status">状态</a>
+        <a href="/web/models">模型同步</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <table>
+        <tr><th>服务</th><td>{{ status.service.name }} / v{{ status.service.version }}</td></tr>
+        <tr><th>时间</th><td>{{ status.service.time }}</td></tr>
+        <tr><th>监听地址</th><td><code>{{ status.service.bind }}</code></td></tr>
+        <tr><th>Worker</th><td>并发={{ status.worker.concurrency }}，队列={{ status.worker.queue_size }}，运行={{ status.worker.running }}</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <table>
+        <tr><th>Codex</th><td>{{ status.executors.codex }}</td></tr>
+        <tr><th>Gemini</th><td>{{ status.executors.gemini }}</td></tr>
+        <tr><th>Shell</th><td>{{ status.executors.shell }}</td></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <table>
+        <tr>
+          <th>Sidecar 探测</th>
+          <td>
+            {% if status.sidecar_probe.ok %}
+              <span class="ok">OK</span>
+            {% else %}
+              <span class="bad">FAIL</span>
+            {% endif %}
+            / {{ status.sidecar_probe.error_type or "none" }}
+          </td>
+        </tr>
+        <tr><th>探测信息</th><td>{{ status.sidecar_probe.message }}</td></tr>
+        <tr><th>最后模型同步</th><td>{{ status.last_model_sync or "暂无" }}</td></tr>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
