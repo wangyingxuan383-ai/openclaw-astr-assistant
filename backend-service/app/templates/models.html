@@ -63,6 +63,40 @@
       padding: 1px 5px;
       font-size: 12px;
     }
+    .actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      border: 1px solid #0b4da2;
+      background: #0b4da2;
+      color: #fff;
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn:hover { opacity: 0.92; }
+    .note { color: var(--muted); font-size: 13px; }
+    .notice {
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    .notice.ok {
+      border: 1px solid #b6e2c8;
+      background: #eefaf2;
+      color: #0b6b3a;
+    }
+    .notice.fail {
+      border: 1px solid #f4c9c9;
+      background: #fff2f2;
+      color: #a11e1e;
+    }
   </style>
 </head>
 <body>
@@ -76,10 +110,30 @@
     </div>
 
     <div class="card">
+      {% if pull_notice %}
+        <div class="notice {{ 'ok' if pull_notice.state == 'ok' else 'fail' }}">
+          {% if pull_notice.state == 'ok' %}
+            一键拉取成功：source={{ pull_notice.source_used or "unknown" }}，
+            provider_count={{ pull_notice.provider_count or "0" }}。
+          {% else %}
+            一键拉取失败：error_code={{ pull_notice.error_code or "unknown" }}，
+            reason={{ pull_notice.reason or "unknown" }}。
+          {% endif %}
+        </div>
+      {% endif %}
       <table>
         <tr><th>最后同步</th><td>{{ last_sync or "暂无" }}</td></tr>
         <tr><th>说明</th><td>仅保存 provider 元数据，不保存 API Key/Token。</td></tr>
       </table>
+    </div>
+
+    <div class="card">
+      <div class="actions">
+        <form method="post" action="/web/models/pull-astr">
+          <button class="btn" type="submit">一键拉取 Astr 配置</button>
+        </form>
+        <div class="note">优先读取 Astr cmd_config，失败自动回退插件导出文件。</div>
+      </div>
     </div>
 
     <div class="card">

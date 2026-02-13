@@ -5,20 +5,21 @@ import re
 import shutil
 import sqlite3
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Optional
 from urllib import error as urlerror
+from urllib import parse as urlparse
 from urllib import request as urlrequest
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
-SERVICE_VERSION = "0.3.0"
+SERVICE_VERSION = "0.3.1"
 PERMISSION_ORDER = {"L0": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4}
 SENSITIVE_TEXT_PATTERNS = [
     re.compile(
@@ -103,6 +104,10 @@ class Settings:
     executor_max_task_chars: int
     executor_allow_global_workdir: bool
     executor_allowed_workdirs: List[Path]
+    astrbot_cmd_config_path: Path
+    astrbot_plugin_export_path: Path
+    astr_pull_source_mode: str
+    astr_pull_require_enabled_provider: bool
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -172,6 +177,30 @@ class Settings:
             for p in allowed_raw.split(",")
             if p.strip()
         ]
+        astrbot_cmd_config_path = Path(
+            str(
+                os.environ.get(
+                    "ASTRBOT_CMD_CONFIG_PATH",
+                    "/root/AstrBot/data/cmd_config.json",
+                )
+            ).strip()
+        )
+        astrbot_plugin_export_path = Path(
+            str(
+                os.environ.get(
+                    "ASTRBOT_PLUGIN_EXPORT_PATH",
+                    "/root/AstrBot/data/plugin_data/astrbot_plugin_openclaw_assistant/astr_provider_export.json",
+                )
+            ).strip()
+        )
+        astr_pull_source_mode = (
+            str(os.environ.get("ASTR_PULL_SOURCE_MODE", "cmd_config_then_export")).strip().lower()
+            or "cmd_config_then_export"
+        )
+        astr_pull_require_enabled_provider = _safe_bool(
+            os.environ.get("ASTR_PULL_REQUIRE_ENABLED_PROVIDER", "true"),
+            True,
+        )
 
         return cls(
             backend_host=backend_host,
@@ -189,6 +218,10 @@ class Settings:
             executor_max_task_chars=executor_max_task_chars,
             executor_allow_global_workdir=executor_allow_global_workdir,
             executor_allowed_workdirs=allowed_workdirs,
+            astrbot_cmd_config_path=astrbot_cmd_config_path,
+            astrbot_plugin_export_path=astrbot_plugin_export_path,
+            astr_pull_source_mode=astr_pull_source_mode,
+            astr_pull_require_enabled_provider=astr_pull_require_enabled_provider,
         )
 
     def ensure_runtime_paths(self) -> None:
@@ -385,6 +418,19 @@ class ExecutorJobCreateRequest(BaseModel):
     allow_danger: bool = False
 
 
+@dataclass
+class AstrPullResult:
+    ok: bool
+    source_mode: str
+    source_used: str
+    provider_count: int
+    using_provider: Optional[Dict[str, str]]
+    providers: List[Dict[str, str]]
+    warnings: List[str] = dataclass_field(default_factory=list)
+    error_code: str = ""
+    error: str = ""
+
+
 SETTINGS.ensure_runtime_paths()
 STORE = StateStore(SETTINGS.backend_db_path)
 RUNTIME = RuntimeState()
@@ -543,6 +589,274 @@ def _cwd_allowed(path: Path) -> bool:
         except ValueError:
             continue
     return False
+
+
+def _normalize_provider_record(
+    provider_id: Any,
+    model: Any,
+    provider_type: Any = "",
+    base_url: Any = "",
+) -> Optional[Dict[str, str]]:
+    pid = str(provider_id or "").strip()
+    mdl = str(model or "").strip()
+    if not pid or not mdl:
+        return None
+    return {
+        "provider_id": pid,
+        "model": mdl,
+        "provider_type": str(provider_type or "").strip(),
+        "base_url": str(base_url or "").strip(),
+    }
+
+
+def _astr_pull_error(
+    *,
+    source_mode: str,
+    error_code: str,
+    error: str,
+    source_used: str = "",
+    warnings: Optional[List[str]] = None,
+) -> AstrPullResult:
+    return AstrPullResult(
+        ok=False,
+        source_mode=source_mode,
+        source_used=source_used,
+        provider_count=0,
+        using_provider=None,
+        providers=[],
+        warnings=list(warnings or []),
+        error_code=error_code,
+        error=_truncate(str(error), 280),
+    )
+
+
+def _pull_from_cmd_config(source_mode: str) -> AstrPullResult:
+    path = SETTINGS.astrbot_cmd_config_path
+    if not path.exists() or not path.is_file():
+        return _astr_pull_error(
+            source_mode=source_mode,
+            source_used="cmd_config",
+            error_code="astr_config_not_found",
+            error=f"Astr 配置文件不存在: {path}",
+        )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig", errors="replace"))
+    except Exception as e:
+        return _astr_pull_error(
+            source_mode=source_mode,
+            source_used="cmd_config",
+            error_code="astr_config_parse_failed",
+            error=f"Astr 配置解析失败: {e}",
+        )
+
+    if not isinstance(data, dict):
+        return _astr_pull_error(
+            source_mode=source_mode,
+            source_used="cmd_config",
+            error_code="astr_config_parse_failed",
+            error="Astr 配置根节点不是对象。",
+        )
+
+    source_index: Dict[str, Dict[str, Any]] = {}
+    for raw_src in data.get("provider_sources", []) or []:
+        if not isinstance(raw_src, dict):
+            continue
+        sid = str(raw_src.get("id") or "").strip()
+        if sid:
+            source_index[sid] = raw_src
+
+    providers: List[Dict[str, str]] = []
+    raw_provider_rows = data.get("provider", []) or []
+    for raw in raw_provider_rows:
+        if not isinstance(raw, dict):
+            continue
+
+        if SETTINGS.astr_pull_require_enabled_provider and not _safe_bool(raw.get("enable", True), True):
+            continue
+
+        source_id = str(raw.get("provider_source_id") or "").strip()
+        source_meta = source_index.get(source_id, {})
+        normalized = _normalize_provider_record(
+            provider_id=raw.get("id") or raw.get("provider_id"),
+            model=raw.get("model"),
+            provider_type=(
+                raw.get("provider_type")
+                or source_meta.get("provider_type")
+                or source_meta.get("type")
+                or source_meta.get("provider")
+                or ""
+            ),
+            base_url=raw.get("base_url") or source_meta.get("api_base") or "",
+        )
+        if normalized:
+            providers.append(normalized)
+
+    if not providers:
+        return _astr_pull_error(
+            source_mode=source_mode,
+            source_used="cmd_config",
+            error_code="astr_provider_empty",
+            error="Astr 配置中没有可用 provider 元数据。",
+        )
+
+    using_provider: Optional[Dict[str, str]] = None
+    provider_settings = data.get("provider_settings", {})
+    default_provider_id = ""
+    if isinstance(provider_settings, dict):
+        default_provider_id = str(provider_settings.get("default_provider_id") or "").strip()
+    if default_provider_id:
+        for item in providers:
+            if item["provider_id"] == default_provider_id:
+                using_provider = dict(item)
+                break
+        if using_provider is None:
+            using_provider = {
+                "provider_id": default_provider_id,
+                "model": "",
+                "provider_type": "",
+                "base_url": "",
+            }
+
+    warnings: List[str] = []
+    if SETTINGS.astr_pull_require_enabled_provider:
+        warnings.append("only_enabled_provider=true")
+
+    return AstrPullResult(
+        ok=True,
+        source_mode=source_mode,
+        source_used="cmd_config",
+        provider_count=len(providers),
+        using_provider=using_provider,
+        providers=providers,
+        warnings=warnings,
+    )
+
+
+def _pull_from_plugin_export(source_mode: str) -> AstrPullResult:
+    path = SETTINGS.astrbot_plugin_export_path
+    if not path.exists() or not path.is_file():
+        return _astr_pull_error(
+            source_mode=source_mode,
+            source_used="plugin_export",
+            error_code="plugin_export_not_found",
+            error=f"插件导出文件不存在: {path}",
+        )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception as e:
+        return _astr_pull_error(
+            source_mode=source_mode,
+            source_used="plugin_export",
+            error_code="plugin_export_parse_failed",
+            error=f"插件导出文件解析失败: {e}",
+        )
+    if not isinstance(data, dict):
+        return _astr_pull_error(
+            source_mode=source_mode,
+            source_used="plugin_export",
+            error_code="plugin_export_parse_failed",
+            error="插件导出 JSON 根节点不是对象。",
+        )
+
+    providers: List[Dict[str, str]] = []
+    for raw in data.get("providers", []) or []:
+        if not isinstance(raw, dict):
+            continue
+        normalized = _normalize_provider_record(
+            provider_id=raw.get("provider_id") or raw.get("id"),
+            model=raw.get("model"),
+            provider_type=raw.get("provider_type"),
+            base_url=raw.get("base_url"),
+        )
+        if normalized:
+            providers.append(normalized)
+
+    if not providers:
+        return _astr_pull_error(
+            source_mode=source_mode,
+            source_used="plugin_export",
+            error_code="astr_provider_empty",
+            error="插件导出文件中没有可用 provider 元数据。",
+        )
+
+    using_provider: Optional[Dict[str, str]] = None
+    raw_using = data.get("using_provider")
+    if isinstance(raw_using, dict):
+        normalized_using = _normalize_provider_record(
+            provider_id=raw_using.get("provider_id") or raw_using.get("id"),
+            model=raw_using.get("model"),
+            provider_type=raw_using.get("provider_type"),
+            base_url=raw_using.get("base_url"),
+        )
+        if normalized_using:
+            using_provider = normalized_using
+
+    return AstrPullResult(
+        ok=True,
+        source_mode=source_mode,
+        source_used="plugin_export",
+        provider_count=len(providers),
+        using_provider=using_provider,
+        providers=providers,
+        warnings=[],
+    )
+
+
+def _pull_astr_models() -> AstrPullResult:
+    mode = SETTINGS.astr_pull_source_mode
+    if mode not in {"cmd_config_then_export", "cmd_config_only", "plugin_export_only"}:
+        mode = "cmd_config_then_export"
+
+    if mode == "cmd_config_only":
+        return _pull_from_cmd_config(mode)
+    if mode == "plugin_export_only":
+        return _pull_from_plugin_export(mode)
+
+    cmd_pull = _pull_from_cmd_config(mode)
+    if cmd_pull.ok:
+        return cmd_pull
+
+    export_pull = _pull_from_plugin_export(mode)
+    if export_pull.ok:
+        export_pull.warnings = [
+            f"cmd_config_failed:{cmd_pull.error_code}",
+            *export_pull.warnings,
+        ]
+        return export_pull
+
+    warnings = [
+        f"cmd_config:{cmd_pull.error_code}",
+        f"plugin_export:{export_pull.error_code}",
+    ]
+    return _astr_pull_error(
+        source_mode=mode,
+        source_used="",
+        error_code="pull_all_sources_failed",
+        error=f"cmd_config={cmd_pull.error}; plugin_export={export_pull.error}",
+        warnings=warnings,
+    )
+
+
+def _pull_result_to_dict(result: AstrPullResult) -> Dict[str, Any]:
+    return {
+        "ok": result.ok,
+        "source_mode": result.source_mode,
+        "source_used": result.source_used,
+        "provider_count": result.provider_count,
+        "using_provider": result.using_provider,
+        "providers": result.providers,
+        "warnings": list(result.warnings or []),
+        "error_code": result.error_code,
+        "error": result.error,
+    }
+
+
+def _store_source_from_pull(source_used: str) -> str:
+    if source_used == "cmd_config":
+        return "web_pull_cmd_config"
+    if source_used == "plugin_export":
+        return "web_pull_plugin_export"
+    return "web_pull_unknown"
 
 
 async def _run_codex_job(job: Dict[str, Any]) -> Dict[str, Any]:
@@ -814,6 +1128,78 @@ async def api_models_import_astr(request: Request, payload: ModelImportRequest):
     return _response_ok(request, imported=rec)
 
 
+@API.post("/models/pull-astr")
+async def api_models_pull_astr(request: Request):
+    trace_id = getattr(request.state, "trace_id", "")
+    pulled = _pull_astr_models()
+    pulled_data = _pull_result_to_dict(pulled)
+
+    if not pulled.ok:
+        _audit_write(
+            {
+                "trace_id": trace_id,
+                "action_category": "model_sync",
+                "action_type": "pull_astr_models",
+                "status": "failed",
+                "error_code": pulled.error_code or "pull_all_sources_failed",
+                "error": pulled.error,
+                "denied": True,
+                "decision_reason": "pull_failed",
+                "params_summary": {
+                    "source_mode": pulled.source_mode,
+                    "warnings": pulled.warnings,
+                },
+            }
+        )
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "trace_id": trace_id,
+                "pulled": pulled_data,
+                "imported": None,
+                "source_mode": pulled.source_mode,
+                "error_code": pulled.error_code or "pull_all_sources_failed",
+                "error": pulled.error or "拉取失败",
+            },
+        )
+
+    source = _store_source_from_pull(pulled.source_used)
+    rec = STORE.replace_model_snapshot(
+        providers=pulled.providers,
+        source=source,
+        trace_id=trace_id,
+    )
+
+    _audit_write(
+        {
+            "trace_id": trace_id,
+            "action_category": "model_sync",
+            "action_type": "pull_astr_models",
+            "status": "ok",
+            "error_code": "",
+            "error": "",
+            "denied": False,
+            "decision_reason": "pull_success",
+            "params_summary": {
+                "source_mode": pulled.source_mode,
+                "source_used": pulled.source_used,
+                "provider_count": pulled.provider_count,
+                "warnings": pulled.warnings,
+            },
+        }
+    )
+
+    return _response_ok(
+        request,
+        pulled=pulled_data,
+        imported=rec,
+        source_mode=pulled.source_mode,
+        error_code="",
+        error="",
+    )
+
+
 @API.post("/executor/jobs")
 async def api_executor_jobs_create(request: Request, payload: ExecutorJobCreateRequest):
     permission_level = str(payload.permission_level or "L0").strip().upper()
@@ -959,14 +1345,93 @@ async def web_status(request: Request):
 async def web_models(request: Request):
     models = STORE.get_models()
     last_sync = STORE.get_last_sync()
+    pull_state = str(request.query_params.get("pull", "")).strip().lower()
+    pull_notice = None
+    if pull_state in {"ok", "fail"}:
+        pull_notice = {
+            "state": pull_state,
+            "source_used": str(request.query_params.get("source_used", "")).strip(),
+            "provider_count": str(request.query_params.get("provider_count", "")).strip(),
+            "error_code": str(request.query_params.get("error_code", "")).strip(),
+            "reason": str(request.query_params.get("reason", "")).strip(),
+        }
     return TEMPLATES.TemplateResponse(
         "models.html",
         {
             "request": request,
             "models": models,
             "last_sync": last_sync,
+            "pull_notice": pull_notice,
         },
     )
+
+
+@APP.post("/web/models/pull-astr")
+async def web_models_pull_astr(request: Request):
+    trace_id = getattr(request.state, "trace_id", "")
+    pulled = _pull_astr_models()
+    params: Dict[str, str] = {"source_mode": pulled.source_mode}
+
+    if not pulled.ok:
+        _audit_write(
+            {
+                "trace_id": trace_id,
+                "action_category": "model_sync",
+                "action_type": "pull_astr_models_web",
+                "status": "failed",
+                "error_code": pulled.error_code or "pull_all_sources_failed",
+                "error": pulled.error,
+                "denied": True,
+                "decision_reason": "web_pull_failed",
+                "params_summary": {
+                    "source_mode": pulled.source_mode,
+                    "warnings": pulled.warnings,
+                },
+            }
+        )
+        params.update(
+            {
+                "pull": "fail",
+                "error_code": pulled.error_code or "pull_all_sources_failed",
+                "reason": pulled.error or "拉取失败",
+            }
+        )
+        return RedirectResponse(url="/web/models?" + urlparse.urlencode(params), status_code=303)
+
+    source = _store_source_from_pull(pulled.source_used)
+    STORE.replace_model_snapshot(
+        providers=pulled.providers,
+        source=source,
+        trace_id=trace_id,
+    )
+    _audit_write(
+        {
+            "trace_id": trace_id,
+            "action_category": "model_sync",
+            "action_type": "pull_astr_models_web",
+            "status": "ok",
+            "error_code": "",
+            "error": "",
+            "denied": False,
+            "decision_reason": "web_pull_success",
+            "params_summary": {
+                "source_mode": pulled.source_mode,
+                "source_used": pulled.source_used,
+                "provider_count": pulled.provider_count,
+                "warnings": pulled.warnings,
+            },
+        }
+    )
+
+    params.update(
+        {
+            "pull": "ok",
+            "source_used": pulled.source_used,
+            "provider_count": str(pulled.provider_count),
+            "reason": "同步完成",
+        }
+    )
+    return RedirectResponse(url="/web/models?" + urlparse.urlencode(params), status_code=303)
 
 
 APP.include_router(API)

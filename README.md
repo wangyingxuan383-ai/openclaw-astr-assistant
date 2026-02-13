@@ -79,14 +79,18 @@ apt update && apt install -y python3.12-venv
 - `GET /api/v1/executors`
 - `GET /api/v1/models`
 - `POST /api/v1/models/import-astr`
+- `POST /api/v1/models/pull-astr`
 - `POST /api/v1/executor/jobs`
 - `GET /api/v1/executor/jobs/{job_id}`
 - `POST /api/v1/executor/jobs/{job_id}/cancel`
+- `POST /web/models/pull-astr`
 
 说明：
 - `/api/*` 默认 Bearer Token 鉴权。
 - Web/API 建议仅监听 `127.0.0.1`。
 - 模型同步只保存 provider 元数据，不保存 API Key/Token。
+- `/web/models` 支持按钮式“一键拉取 Astr 配置”，默认优先读取
+  `/root/AstrBot/data/cmd_config.json`，失败自动回退插件导出文件。
 
 ## 插件侧最小对接
 在插件配置中至少填写：

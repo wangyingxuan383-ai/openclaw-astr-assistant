@@ -31,6 +31,12 @@ mkdir -p /root/openclaw-assistant-backend/data/openclaw_home \
 OPENCLAW_GATEWAY_TOKEN=replace_with_strong_random_token
 OPENCLAW_VERSION=2026.2.9
 BACKEND_API_TOKEN=replace_with_strong_random_token
+
+# 可选：Web 一键拉取 Astr 配置
+ASTRBOT_CMD_CONFIG_PATH=/root/AstrBot/data/cmd_config.json
+ASTRBOT_PLUGIN_EXPORT_PATH=/root/AstrBot/data/plugin_data/astrbot_plugin_openclaw_assistant/astr_provider_export.json
+ASTR_PULL_SOURCE_MODE=cmd_config_then_export
+ASTR_PULL_REQUIRE_ENABLED_PROVIDER=true
 ```
 
 ## 4. sidecar 启动/停止
@@ -96,6 +102,10 @@ curl -i http://127.0.0.1:18889/api/v1/status
 ```bash
 curl -i http://127.0.0.1:18889/api/v1/status \
   -H "Authorization: Bearer ${BACKEND_API_TOKEN}"
+
+# 一键拉取（API）
+curl -i -X POST http://127.0.0.1:18889/api/v1/models/pull-astr \
+  -H "Authorization: Bearer ${BACKEND_API_TOKEN}"
 ```
 
 ## 7. 插件侧最小配置
@@ -107,6 +117,7 @@ curl -i http://127.0.0.1:18889/api/v1/status \
 验证：
 - `/助手 诊断`
 - `/助手 模型导出JSON`
+- 或访问后端 `/web/models` 点击“一键拉取 Astr 配置”
 
 ## 8. 常见故障与处理
 - `auth_failed`
@@ -118,6 +129,15 @@ curl -i http://127.0.0.1:18889/api/v1/status \
 - `backend_unreachable`
 - 原因：backend-service 未启动或地址错误
 - 处理：检查 `ss -lntp | rg 18889`、进程日志
+- `astr_config_not_found`
+- 原因：后端读取不到 `cmd_config.json` 且未成功回退
+- 处理：检查 `ASTRBOT_CMD_CONFIG_PATH`、文件权限和路径
+- `plugin_export_not_found`
+- 原因：回退文件不存在（未执行过 `/助手 模型导出JSON`）
+- 处理：先在 QQ 触发导出，或修正 `ASTRBOT_PLUGIN_EXPORT_PATH`
+- `pull_all_sources_failed`
+- 原因：主路径和回退路径都失败
+- 处理：查看 `/web/models` 提示与后端审计日志定位具体子错误
 - `executor_not_available`
 - 原因：后端未检测到 `codex` 二进制
 - 处理：安装/修复 Codex CLI 或调整 `EXECUTOR_CODEX_BIN`

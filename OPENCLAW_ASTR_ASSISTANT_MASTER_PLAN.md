@@ -238,3 +238,20 @@
   - 维持高危保护：`backend_exec_job` 纳入高危确认链路。
 - 资源预算变化
   - 增加 backend-service 后建议最低资源保持 `2 vCPU / 4GiB RAM`，低于该配置仅建议开发验证。
+
+### v0.7 (2026-02-13)
+- 新增
+  - backend-service 新增 `POST /api/v1/models/pull-astr`，支持后端主动拉取 Astr provider 元数据并入库。
+  - backend-service 新增 `POST /web/models/pull-astr`，模型页可按钮式一键拉取。
+  - 模型拉取新增双通道容错：优先 `cmd_config.json`，失败回退插件导出 JSON。
+  - 新增配置项：`ASTRBOT_CMD_CONFIG_PATH`、`ASTRBOT_PLUGIN_EXPORT_PATH`、`ASTR_PULL_SOURCE_MODE`、`ASTR_PULL_REQUIRE_ENABLED_PROVIDER`。
+- 调整
+  - `/web/models` 增加手动拉取结果提示（source/provider_count/error_code）。
+  - 文档与运维手册同步补充“一键拉取”与对应故障码排查。
+- 删除
+  - 无。
+- 风险评估变化
+  - 降低风险：后端可主动同步，减少“仅依赖 QQ 命令导出”导致的配置漂移。
+  - 保留风险：若 `cmd_config` 路径或权限异常，需依赖导出文件回退；通过双通道与错误码暴露缓解。
+- 资源预算变化
+  - 无新增资源要求，仍保持后端 worker 并发 `1` 与本机回环监听策略。

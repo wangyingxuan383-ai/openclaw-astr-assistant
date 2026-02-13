@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.3.1 (2026-02-13)
+- Added model sync pull endpoints:
+  - `POST /api/v1/models/pull-astr` (Bearer auth)
+  - `POST /web/models/pull-astr` (models page one-click action)
+- Added dual-source fallback sync logic:
+  - primary: `/root/AstrBot/data/cmd_config.json`
+  - fallback: plugin export JSON
+- Added backend env options:
+  - `ASTRBOT_CMD_CONFIG_PATH`
+  - `ASTRBOT_PLUGIN_EXPORT_PATH`
+  - `ASTR_PULL_SOURCE_MODE`
+  - `ASTR_PULL_REQUIRE_ENABLED_PROVIDER`
+- Updated `models.html` with button trigger and sync result feedback.
+- Updated runbook and readmes with pull workflow and troubleshooting codes.
+
 ## v0.3.0 (2026-02-12)
 - Added `backend-service/` (FastAPI + Jinja2 + sqlite):
   - Web pages: `GET /web/status`, `GET /web/models`
